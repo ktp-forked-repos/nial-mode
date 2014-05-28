@@ -1,18 +1,21 @@
-
-;;; j-mode.el --- Major mode for editing J programs
+;;; nial-console.el --- integration with the nial console.
 
 ;; Copyright (C) 2012 Zachary Elliott
+;; Copyright (C) 2012 Michal J Wallace
 ;;
+;; Authors: Michal J Wallace <michal.wallace@gmail.com>
 ;; Authors: Zachary Elliott <ZacharyElliott1@gmail.com>
-;; URL: http://github.com/zellio/j-mode
+;; URL: https://github.com/tangentstorm/nial-mode
 ;; Version: 1.1.0
-;; Keywords: J, Langauges
+;; Keywords: nial, Langauges
 
 ;; This file is not part of GNU Emacs.
 
 ;;; Commentary:
 
-;;
+;; This code was forked from j-mode by Zachary Elliott.
+;; (And, other than whitespace and the language name,
+;; is still almost exactly the same.)
 
 ;;; License:
 
@@ -33,115 +36,120 @@
 
 ;;; Code:
 
-
 (require 'comint)
 
+
+;;--  customization----
 
-;; (defconst j-console-version "1.0.2"
-;;   "`j-console' version")
-
-(defgroup j-console nil
-  "REPL integration extention for `j-mode'"
+(defgroup nial-console nil
+  "REPL integration extention for `nial-mode'"
   :group 'applications
-  :group 'j
-  :prefix "j-console-")
+  :group 'nial
+  :prefix "nial-console-")
 
-(defcustom j-console-cmd "jconsole"
-  "Name of the executable used for the J REPL session"
+(defcustom nial-console-cmd "nial"
+  "Name of the executable used for the nial session"
   :type 'string
-  :group 'j-console)
+  :group 'nial-console)
 
-(defcustom j-console-cmd-args '()
+(defcustom nial-console-cmd-args '()
   "Arguments to be passed to the j-console-cmd on start"
   :type 'string
-  :group 'j-console)
+  :group 'nial-console)
 
-(defcustom j-console-cmd-init-file nil
+(defcustom nial-console-cmd-init-file nil
   "Full path to the file who's contents are sent to the
-  j-console-cmd on start
+  nial-console-cmd on start
 
-Should be NIL if there is no file not the empty string"
+Should be NIL if there is no file, not the empty string"
   :type 'string
-  :group 'j-console)
+  :group 'nial-console)
 
-(defcustom j-console-cmd-buffer-name "J"
-  "Name of the buffer which contains the j-console-cmd session"
+(defcustom nial-console-cmd-buffer-name "*Nial*"
+  "Name of the buffer which contains the nial-console-cmd session"
   :type 'string
-  :group 'j-console)
+  :group 'nial-console)
 
-(defvar j-console-comint-input-filter-function nil
+(defvar nial-console-comint-input-filter-function nil
   "J mode specific mask for comint input filter function")
 
-(defvar j-console-comint-output-filter-function nil
+(defvar nial-console-comint-output-filter-function nil
   "J mode specific mask for comint output filter function")
 
-(defvar j-console-comint-preoutput-filter-function nil
+(defvar nial-console-comint-preoutput-filter-function nil
   "J mode specific mask for comint preoutput filter function")
 
-;; 'comint-preoutput-filter-functions
-;; (lambda ( output )
-;;   (if (string-match "^[ \r\n\t]+" output)
-;;       (concat "  " (replace-match "" nil t output))
-;;     output))))
+
+;;-- session interaction ---
 
-(defun j-console-create-session ()
-  "Starts a comint session wrapped around the j-console-cmd"
+(defun nial-console-create-session ()
+  "Starts a comint session wrapped around the nial-console-cmd"
   (setq comint-process-echoes t)
-  (apply 'make-comint j-console-cmd-buffer-name
-         j-console-cmd j-console-cmd-init-file j-console-cmd-args)
+  (apply 'make-comint nial-console-cmd-buffer-name
+         nial-console-cmd nial-console-cmd-init-file
+	 nial-console-cmd-args)
   (mapc
-   (lambda ( comint-hook-sym )
+   (lambda (comint-hook-sym)
      (let ((local-comint-hook-fn-sym
             (intern
              (replace-regexp-in-string
-              "s$" "" (concat "j-console-" (symbol-name comint-hook-sym))))))
+              "s$" "" (concat "nial-console-"
+			      (symbol-name comint-hook-sym))))))
        (when (symbol-value local-comint-hook-fn-sym)
-         (add-hook comint-hook-sym (symbol-value local-comint-hook-fn-sym)))))
+         (add-hook comint-hook-sym
+		   (symbol-value local-comint-hook-fn-sym)))))
    '(comint-input-filter-functions
      comint-output-filter-functions
      comint-preoutput-filter-functions)))
 
-(defun j-console-ensure-session ()
-  "Checks for a running j-console-cmd comint session and either
+(defun nial-console-ensure-session ()
+  "Checks for a running nial-console-cmd comint session and either
   returns it or starts a new session and returns that"
-  (or (get-process j-console-cmd-buffer-name)
+  (or (get-process nial-console-cmd-buffer-name)
       (progn
-        (j-console-create-session)
-        (get-process j-console-cmd-buffer-name))))
+        (nial-console-create-session)
+        (get-process nial-console-cmd-buffer-name))))
 
-(define-derived-mode inferior-j-mode comint-mode "Inferior J"
-  "Major mode for J inferior process.")
+
+;;-- buffer integration ---
+
+(define-derived-mode inferior-nial-mode comint-mode "Inferior Nial"
+  "Major mode for Nial inferior process.")
 
 ;;;###autoload
-(defun j-console ()
-  "Ensures a running j-console-cmd session and switches focus to
+(defun nial-console ()
+  "Ensures a running nial-console-cmd session and switches focus to
 the containing buffer"
   (interactive)
-  (switch-to-buffer-other-window (process-buffer (j-console-ensure-session)))
-  (inferior-j-mode))
+  (switch-to-buffer-other-window
+   (process-buffer (nial-console-ensure-session)))
+  (inferior-nial-mode))
 
-(defun j-console-execute-region ( start end )
-  "Sends current region to the j-console-cmd session and exectues it"
+(defun nial-console-execute-region ( start end )
+  "Sends current region to the nial-console-cmd session and exectues it"
   (interactive "r")
   (when (= start end)
     (error "Region is empty"))
   (let ((region (buffer-substring-no-properties start end))
-        (session (j-console-ensure-session)))
+        (session (nial-console-ensure-session)))
     (pop-to-buffer (process-buffer session))
     (goto-char (point-max))
     (insert-string (format "\n%s\n" region))
     (comint-send-input)))
 
-(defun j-console-execute-line ()
-  "Sends current line to the j-console-cmd session and exectues it"
+(defun nial-console-execute-line ()
+  "Sends current line to the nial-console-cmd session and exectues it"
   (interactive)
-  (j-console-execute-region (point-at-bol) (point-at-eol)))
+  (nial-console-execute-region (point-at-bol) (point-at-eol)))
 
-(defun j-console-execute-buffer ()
-  "Sends current buffer to the j-console-cmd session and exectues it"
+(defun nial-console-execute-buffer ()
+  "Sends current buffer to the nial-console-cmd session and exectues it"
   (interactive)
-  (j-console-execute-region (point-min) (point-max)))
+  (nial-console-execute-region (point-min) (point-max)))
 
-(provide 'j-console)
+
+;;-- initialization ---
 
-;;; j-console.el ends here
+(provide 'nial-console)
+
+;;; nial-console.el ends here
