@@ -26,16 +26,10 @@
 
 ;;; Commentary:
 
-;; This file is not intended to ever be loaded by org-babel, rather it
-;; is a template for use in adding new language support to Org-babel.
-;; Good first steps are to copy this file to a file named by the
-;; language you are adding, and then use query-replace' to replace
-;; all strings of "template" in this file with the name of your new
-;; language.
-;;
-;; If you have questions as to any of the portions of the file defined
-;; below please look to existing language support for guidance.
-;;
+;; Based on the ob-template.el example (except that ob-template
+;; has out-of-date ideas about the order of the parameters, so
+;; I replaced its 'first, 'second, etc calls with 'assoc...
+
 ;; If you are planning on adding a language to org-babel we would ask
 ;; that if possible you fill out the FSF copyright assignment form
 ;; available at http://orgmode.org/request-assign-future.txt as this
@@ -43,40 +37,42 @@
 ;; of Org-mode, otherwise unassigned language support files can still
 ;; be included in the contrib/ directory of the Org-mode repository.
 
-;;; Requirements:
-
-;; Use this section to list the requirements of this language.  Most
-;; languages will require that at least the language be installed on
-;; the user's system, and the Emacs major mode relevant to the
-;; language be installed as well.
-
 ;;; Code:
+
+;-- requirements
+
+
 (require 'ob)
-(require 'ob-ref)
-(require 'ob-comint)
-(require 'ob-eval)
-;; possibly require modes required for your language
+;(require 'ob-ref)
+;(require 'ob-comint)
+;(require 'ob-eval)
+(require 'nial-mode)
+(require 'nial-console)
 
-;; optionally define a file extension for this language
-(add-to-list 'org-babel-tangle-lang-exts '("nial" . "tmp"))
 
-;; optionally declare default header arguments for this language
+
+;-- helper routine for lisp
+
+(defun getitem (alist key)
+  (cdr (assoc key alist)))
+
+
+(add-to-list 'org-babel-tangle-lang-exts '("nial" . "ndf"))
+
 (defvar org-babel-default-header-args:nial '())
 
-;; This function expands the body of a source code block by doing
-;; things like prepending argument definitions to the body, it should
-;; be called by the org-babel-execute:nial' function below.
-(defun org-babel-expand-body:nial (body params &optional processed-params)
-  "Expand BODY according to PARAMS, return the expanded body."
-  (require 'inf-template)
-  (let ((vars (nth 1 (or processed-params (org-babel-process-params params)))))
-    (concat
-     (mapconcat ;; define any variables
-      (lambda (pair)
-        (format "%s=%S"
-                (car pair) (org-babel-nial-var-to-nial (cdr pair))))
-      vars "\n") "\n" body "\n")))
+
 
+(defun org-babel-expand-body:nial (body params)
+  "Expand BODY according to PARAMS, return the expanded body."
+  (let ((vars (list (getitem params :var)))
+	(set! (lambda (pair)
+		(format "%s := %S;\n" (car pair)
+			(org-babel-nial-var-to-nial (cdr pair))))))
+    (concat (mapconcat set! vars "")
+	    body)))
+
+
 ;; This is the main function which is called to evaluate a code
 ;; block.
 ;;
@@ -88,44 +84,26 @@
 ;; - value means that the value of the last statement in the
 ;;   source code block will be returned
 ;;
-;; The most common first step in this function is the expansion of the
-;; PARAMS argument using org-babel-process-params'.
-;;
-;; Please feel free to not implement options which aren't appropriate
-;; for your language (e.g. not all languages support interactive
-;; "session" evaluation).  Also you are free to define any new header
-;; arguments which you feel may be useful -- all header arguments
-;; specified by the user will be available in the PARAMS variable.
+;;  header arguments specified by the user will be in `params`.
+
 (defun org-babel-execute:nial (body params)
   "Execute a block of Nial code with org-babel.
 This function is called by org-babel-execute-src-block'"
   (message "executing Nial source code block")
+
   (let* ((processed-params (org-babel-process-params params))
-         ;; set the session if the session variable is non-nil
-         (session (org-babel-nial-initiate-session (first processed-params)))
-         ;; variables assigned for use in the block
-         (vars (second processed-params))
-         (result-params (third processed-params))
-         ;; either OUTPUT or VALUE which should behave as described above
-         (result-type (fourth processed-params))
-         ;; expand the body with org-babel-expand-body:nial'
+	 (sesname (getitem params :session))
+         (session (org-babel-nial-initiate-session sesname))
+	 (vars (getitem params :var))
          (full-body (org-babel-expand-body:nial
-                     body params processed-params)))
-    ;; actually execute the source-code block either in a session or
-    ;; possibly by dropping it to a temporary file and evaluating the
-    ;; file.
-    ;; 
-    ;; for session based evaluation the functions defined in
-    ;; org-babel-comint' will probably be helpful.
-    ;;
-    ;; for external evaluation the functions defined in
-    ;; org-babel-eval' will probably be helpful.
-    ;;
-    ;; when forming a shell command, or a fragment of code in some
-    ;; other language, please preprocess any file names involved with
-    ;; the function org-babel-process-file-name'. (See the way that
-    ;; function is used in the language files)
-    ))
+                     body processed-params)))
+
+    (org-babel-nial-strip-whitespace
+     (org-babel-nial-eval-string full-body))))
+
+
+
+; -- (  TODO ) ---------------------------
 
 ;; This function should be used to assign any variables in params in
 ;; the context of the session environment.
@@ -136,18 +114,50 @@ This function is called by org-babel-execute-src-block'"
 (defun org-babel-nial-var-to-nial (var)
   "Convert an elisp var into a string of nial source code
 specifying a var of the same value."
-  (format "%S" var))
+  var) ;; just pass through, until i can think of a better idea
 
 (defun org-babel-nial-table-or-string (results)
   "If the results look like a table, then convert them into an
 Emacs-lisp table, otherwise return the results as a string."
+  ; TODO
   )
+
+
+; -- comint -------------
 
 (defun org-babel-nial-initiate-session (&optional session)
   "If there is not a current inferior-process-buffer in SESSION then create.
 Return the initialized session."
-  (unless (string= session "none")
-    ))
+  (let ((com (nial-console-ensure-session)))
+	(comint-send-string com "setprompt ''\n") ))
 
+
+(defun org-babel-nial-eval  ; mostly taken from ob-J.el
+  "Sends STR to the `nial-console-cmd' session and exectues it."
+  (let ((session (nial-console-ensure-session)))
+    (with-current-buffer (process-buffer session)
+      (goto-char (point-max))
+      (insert (format "\n%s\n\r" str))
+      (let ((beg (point)))
+	(comint-send-input)
+	(sit-for .1)
+	(buffer-substring-no-properties
+	 beg (point-max))))))
+
+
+(defun org-babel-nial-strip-whitespace (str)
+  "Remove whitespace from nial output STR."
+  (with-temp-buffer
+    (insert (delete ? str))
+    (beginning-of-buffer)
+    (while (looking-at "[[:cntrl:]]") (delete-char 1))
+
+    ;; ;; delete whitespace up front:
+    ;; (progn
+    ;;	   (set-mark (point)) (forward-word)
+    ;;	   (backward-word)
+    ;;	   (delete-region (mark) (point)))
+    (buffer-string)))
+
 (provide 'ob-nial)
 ;;; ob-nial.el ends here
