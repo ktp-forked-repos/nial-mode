@@ -12,6 +12,14 @@
 
 ;;; Code:
 
+(require 'cl) ; only for assert, afaik...
+
+
+; define these for debugging just in case org isn't loaded
+(defvar org-defvarialias)
+(defvar org-babel-tangle-lang-exts)
+
+
 (defvar nial-mode-hook nil)
 
 (defvar nial-mode-map (make-keymap)
