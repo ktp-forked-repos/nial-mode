@@ -1,6 +1,6 @@
 ;;; nial-mode.el --- nial mode for emacs
 
-; a simple mode for editing scarlet files
+; a simple mode for editing nial files
 ; based on tutorial from:
 ; http://www.emacswiki.org/emacs/ModeTutorial
 
